@@ -1,20 +1,6 @@
-from collections import deque, defaultdict
-from functools import total_ordering, lru_cache
-from inspect import trace, stack
-from itertools import count
-from sys import int_info
-from zipfile import stringEndArchive
+from collections import defaultdict
 
-from lib2to3.fixer_util import is_list
-from lib2to3.fixes.fix_tuple_params import map_to_index
-from math import remainder
-from multiprocessing.util import sub_debug
-from platform import python_revision, libc_ver
-from sqlite3 import connect
-from string import digits
 from typing import *
-from unicodedata import digit
-from unittest.mock import right
 
 from leetcode_0_types import *
 
@@ -2953,7 +2939,449 @@ class Solution:
             return memo[i, targetSum]
         return check(0, target)
 
+    def pacificAtlantic(self, heights: List[List[int]]) -> List[List[int]]:
+        N = len(heights)
+        M = len(heights[0])
+        reached = [[0 for _ in range(M)] for _ in range(N)]
 
+        def gen(i, j):
+            for di, dj in [(-1, 0), (1, 0), (0, 1), (0, -1)]:
+                if i + di < 0 or i + di >= N: continue
+                if j + dj < 0 or j + dj >= M: continue
+                yield i + di, j + dj
+
+        def propagate(initial_cells):
+            seen = [[False for _ in range(M)] for _ in range(N)]
+            for c in initial_cells:
+                if seen[c[0]][c[1]]: continue
+                seen[c[0]][c[1]] = True
+                reached[c[0]][c[1]] += 1
+
+            stack = initial_cells
+            while stack:
+                cell = stack.pop()
+                for x, y in gen(cell[0], cell[1]):
+                    if heights[x][y] < heights[cell[0]][cell[1]]: continue
+                    if seen[x][y]: continue
+                    seen[x][y] = True
+                    reached[x][y] += 1
+                    stack.append((x, y))
+        pacific_cells = []
+        antarctic_cells = []
+        for i in range(N):
+            pacific_cells.append((i, 0))
+            antarctic_cells.append((i, M - 1))
+        for j in range(M):
+            pacific_cells.append((0, j))
+            antarctic_cells.append((N - 1, j))
+        propagate(pacific_cells)
+        propagate(antarctic_cells)
+        result = []
+        for i in range(N):
+            for j in range(M):
+                if reached[i][j] == 2:
+                    result.append([i, j])
+        return result
+
+    def minCost(self, maxTime: int, edges: List[List[int]], passingFees: List[int]) -> int:
+        import heapq
+        import math
+        N = len(passingFees)
+        graph = [[] for _ in range(N)]
+        for e in edges:
+            graph[e[0]].append((e[1], e[2]))
+            graph[e[1]].append((e[0], e[2]))
+        minTime = [math.inf] * N
+        # cost, city, time
+        heap = [(passingFees[0], 0, 0)]
+
+        while heap:
+            cost, city, time = heapq.heappop(heap)
+            if city == N - 1: return cost
+            if minTime[city] <= time: continue
+            minTime[city] = time
+
+            for edge in graph[city]:
+                nei = edge[0]
+                new_time = time + edge[1]
+                new_cost = cost + passingFees[nei]
+                if new_time > maxTime: continue
+                heapq.heappush(heap, (new_cost, nei, new_time))
+        return -1
+
+    def timeTaken(self, arrival: List[int], state: List[int]) -> List[int]:
+        from collections import deque
+        persons = []
+        for i in range(len(arrival)):
+            persons.append((arrival[i], state[i], i))
+        persons.sort()
+        result = []
+        index = 0
+        process_time = 0
+        exit_queue = deque()
+        enter_queue = deque()
+        previous_state = None
+
+        def push_person(index):
+            if persons[index][1] == 0:
+                enter_queue.append(persons[index][2])
+            else:
+                exit_queue.append(persons[index][2])
+
+        def process_once():
+            if not enter_queue and not exit_queue: return None
+            if not enter_queue:
+                selected_queue = exit_queue
+                next_state = 1
+            elif not exit_queue:
+                selected_queue = enter_queue
+                next_state = 0
+            elif previous_state is not None and previous_state == 0:
+                selected_queue = enter_queue
+                next_state = 0
+            elif previous_state is not None and previous_state == 1:
+                selected_queue = exit_queue
+                next_state = 1
+            else:
+                selected_queue = exit_queue
+                next_state = 1
+            selected_index = selected_queue.popleft()
+            result.append((selected_index, process_time))
+            return next_state
+
+        while True:
+            while index < len(persons):
+                if persons[index][0] <= process_time:
+                    push_person(index)
+                    index += 1
+                else: break
+            previous_state = process_once()
+            process_time += 1
+            if index == len(persons) and not enter_queue and not exit_queue: break
+
+        final_result = [0] * len(arrival)
+        for i, time in result:
+            final_result[i] = time
+        return final_result
+
+    def wordPattern(self, pattern: str, s: str) -> bool:
+        existing = dict()
+        reverse_index = dict()
+        words = s.split(' ')
+        if len(pattern) != len(words): return False
+        for i, p in enumerate(pattern):
+            if p in existing:
+                if existing[p] != words[i]: return False
+                if reverse_index[words[i]] != p: return False
+            else:
+                if words[i] in reverse_index: return False
+                existing[p] = words[i]
+                reverse_index[words[i]] = p
+        return True
+
+    def wordPatternMatch(self, pattern: str, s: str) -> bool:
+        index = dict()
+        reverse_index = dict()
+
+        def check(i, j):
+            if i == len(pattern):
+                return j == len(s)
+            if pattern[i] in index:
+                w = index[pattern[i]]
+                if s[j:j + len(w)] == w:
+                    return check(i + 1, j + len(w))
+                else: return False
+
+            for k in range(j, len(s)):
+                w = s[j:k + 1]
+                if w in reverse_index: continue
+                index[pattern[i]] = w
+                reverse_index[w] = pattern[i]
+                if check(i + 1, k + 1): return True
+                del index[pattern[i]]
+                del reverse_index[w]
+            return False
+        return check(0, 0)
+
+    def kthCharacter(self, k: int) -> str:
+        def gen(word):
+            result = []
+            for c in word:
+                result.append(chr((ord(c) - ord('a') + 1) % 26 + ord('a')))
+            return word + ''.join(result)
+        word = 'a'
+        while True:
+            word = gen(word)
+            if k - 1 < len(word):
+                return word[k - 1]
+
+
+    def countPrefixSuffixPairs(self, words: List[str]) -> int:
+        from collections import Counter
+        counter = Counter()
+        result = 0
+        for w in words:
+            for i in range(1, len(w) + 1):
+                candidate = w[:i]
+                if candidate != w[len(w) - i:]: continue
+                if candidate not in counter: continue
+                result += counter[candidate]
+            counter[w] += 1
+        return result
+
+    def eraseOverlapIntervals(self, intervals: List[List[int]]) -> int:
+        import math
+        intervals = [(inter[0], inter[1]) for inter in intervals]
+        intervals.sort()
+        max_total = 0
+        min_left = -math.inf
+
+        for inter in intervals:
+            if inter[0] >= min_left:
+                min_left = inter[1]
+                max_total += 1
+            elif inter[1] < min_left:
+                min_left = inter[1]
+        return len(intervals) - max_total
+
+    def maxDistance(self, colors: List[int]) -> int:
+        first_min = 0
+        second_min = None
+        for i in range(1, len(colors)):
+            if colors[i] != colors[first_min]:
+                second_min = i
+                break
+
+        result = 0
+        for i in range(1, len(colors)):
+            if colors[i] == colors[first_min]:
+                result = max(result, i - second_min)
+            else:
+                result = max(result, i - first_min)
+        return result
+
+    def maximumLength(self, s: str) -> int:
+        def check(times):
+            for i in range(26):
+                c = chr(ord('a') + i)
+                target = c * times
+                index1 = s.find(target)
+                if index1 == -1: continue
+                tmp = s[index1 + 1:]
+                index2 = tmp.find(target)
+                if index2 == -1: continue
+                index3 = tmp[index2 + 1:].find(target)
+                if index3 != -1: return True
+            return False
+
+        left, right = 1, len(s) - 1
+        while left <= right:
+            mid = (left + right) // 2
+            if check(mid):
+                left = mid + 1
+            else:
+                right = mid - 1
+        if right == 0: return -1
+        else: return right
+
+    def largestValues(self, root: Optional[TreeNode]) -> List[int]:
+        import math
+        if not root: return []
+        rows = []
+        stack = [(root, 0)]
+        while stack:
+            node, level = stack.pop()
+            while len(rows) <= level:
+                rows.append(-math.inf)
+            rows[level] = max(rows[level], node.val)
+            if node.left is not None:
+                stack.append((node.left, level + 1))
+            if node.right is not None:
+                stack.append((node.right, level + 1))
+        return rows
+
+    def findMaxLength(self, nums: List[int]) -> int:
+        max_length = 0
+        s = 0
+        seen_s = dict()
+        for i, n in enumerate(nums):
+            if n == 1:
+                s += 1
+            else:
+                s -= 1
+            if s == 0:
+                max_length = max(max_length, i + 1)
+            else:
+                if s in seen_s:
+                    max_length = max(max_length, i - seen_s[s])
+                else:
+                    seen_s[s] = i
+        return max_length
+
+    def singleNonDuplicate(self, nums: List[int]) -> int:
+        if len(nums) == 1: return nums[0]
+        left, right = 0, len(nums) - 1
+
+        while left <= right:
+            mid = (left + right) // 2
+            if mid - 1 >= 0 and nums[mid] == nums[mid - 1]:
+                if (mid + 1) % 2 == 0:
+                    left = mid + 1
+                else:
+                    right = mid - 1
+            elif mid + 1 < len(nums) and nums[mid] == nums[mid + 1]:
+                if (mid + 2) % 2 == 0:
+                    left = mid + 1
+                else:
+                    right = mid - 1
+            else:
+                return nums[mid]
+        return -1
+
+    def nextGreaterElement(self, nums1: List[int], nums2: List[int]) -> List[int]:
+        next_greater = []
+        result2 = [-1] * len(nums2)
+        for i in range(len(nums2) - 1, -1, -1):
+            while next_greater and next_greater[-1] <= nums2[i]:
+                next_greater.pop()
+            if not next_greater:
+                result2[i] = -1
+            else:
+                result2[i] = next_greater[-1]
+            next_greater.append(nums2[i])
+        num2idx = {n: i for i, n in enumerate(nums2)}
+        result = []
+        for n in nums1:
+            result.append(result2[num2idx[n]])
+        return result
+
+    def nextGreaterElements(self, nums: List[int]) -> List[int]:
+        extended = nums + nums
+        stack = []
+        greater = [-1] * len(extended)
+        for i in range(len(extended) - 1, -1, -1):
+            while stack and stack[-1] <= extended[i]:
+                stack.pop()
+            if stack:
+                greater[i] = stack[-1]
+            stack.append(extended[i])
+        return greater[:len(nums)]
+
+    def findBottomLeftValue(self, root: Optional[TreeNode]) -> int:
+        max_depth = 0
+        left_value = root.val
+
+        stack = [(0, root)]
+        while stack:
+            depth, node = stack.pop()
+            if depth > max_depth:
+                max_depth = depth
+                left_value = node.val
+            if node.right is not None:
+                stack.append((depth + 1, node.right))
+            if node.left is not None:
+                stack.append((depth + 1, node.left))
+        return left_value
+
+    def findFrequentTreeSum(self, root: Optional[TreeNode]) -> List[int]:
+        from collections import Counter
+        counter = Counter()
+
+        def dfs(node):
+            v = node.val
+            if node.left is not None:
+                v += dfs(node.left)
+            if node.right is not None:
+                v += dfs(node.right)
+            counter[v] += 1
+            return v
+        dfs(root)
+        max_val = max(counter.values())
+        result = [k for k, v in counter.items() if v == max_val]
+        return result
+
+    def generate(self, numRows: int) -> List[List[int]]:
+        if numRows == 1: return [[1]]
+        rows = [[1], [1, 1]]
+        if len(rows) == numRows: return rows
+        while len(rows) < numRows:
+            length = len(rows) + 1
+            new_row = [1]
+            while len(new_row) < length - 1:
+                new_row.append(rows[-1][len(new_row) - 1] + rows[-1][len(new_row)])
+            new_row.append(1)
+            rows.append(new_row)
+        return rows
+
+    def getRow(self, rowIndex: int) -> List[int]:
+        rowIndex += 1
+        if rowIndex == 1: return [1]
+        prev_row = [1, 1]
+        index = 2
+        if index == rowIndex: return prev_row
+        while index < rowIndex:
+            length = index + 1
+            new_row = [1]
+            while len(new_row) < length - 1:
+                new_row.append(prev_row[len(new_row) - 1] + prev_row[len(new_row)])
+            new_row.append(1)
+            prev_row = new_row
+            index += 1
+        return prev_row
+
+    def isPalindrome(self, s: str) -> bool:
+        letters = set([chr(ord('a') + i) for i in range(26)]
+                      + [str(i) for i in range(10)])
+        a = []
+        for c in s:
+            c = c.lower()
+            if c in letters:
+                a.append(c)
+        left, right = 0, len(a) - 1
+        while left < right:
+            if a[left] != a[right]: return False
+            left += 1
+            right -= 1
+        return True
+
+    def isIsomorphic(self, s: str, t: str) -> bool:
+        if len(s) != len(t): return False
+        map = dict()
+        reverse_map = dict()
+        for c_s, c_t in zip(s, t):
+            if c_s in map:
+                if map[c_s] != c_t: return False
+            elif c_t in reverse_map:
+                return False
+            else:
+                map[c_s] = c_t
+                reverse_map[c_t] = c_s
+        return True
+
+
+    def reverseList(self, head: Optional[ListNode]) -> Optional[ListNode]:
+        dummy_head = ListNode()
+        node = head
+        while node:
+            current = node
+            node = node.next
+            current.next = dummy_head.next
+            dummy_head.next = current
+        return dummy_head.next
+
+    def deleteDuplicates(self, head: Optional[ListNode]) -> Optional[ListNode]:
+        dummy_head = ListNode(None)
+        node = head
+        tail = dummy_head
+        while node:
+            if tail.val != node.val:
+                tail.next = node
+                tail = node
+                node = node.next
+                tail.next = None
+            else:
+                node = node.next
+        return dummy_head.next
 
 
 
